@@ -2,7 +2,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   const toggle = document.getElementById('enabledToggle');
   const targetLangSelect = document.getElementById('targetLang');
   const engineSelect = document.getElementById('engineSelect');
-  const keywordsInput = document.getElementById('keywordsInput');
   const statusText = document.getElementById('statusText');
   const openOptions = document.getElementById('openOptions');
 
@@ -19,9 +18,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   toggle.checked = settings.enabled;
   targetLangSelect.value = settings.targetLang;
   engineSelect.value = settings.engine;
-  if (settings.keywords && settings.keywords.length > 0) {
-    keywordsInput.value = settings.keywords.join(', ');
-  }
   updateStatus(settings.enabled);
 
   toggle.addEventListener('change', async () => {
@@ -39,13 +35,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   engineSelect.addEventListener('change', async () => {
     const settings = await getSettings();
     settings.engine = engineSelect.value;
-    await sendMessage({ type: 'SAVE_SETTINGS', settings });
-  });
-
-  keywordsInput.addEventListener('change', async () => {
-    const settings = await getSettings();
-    settings.keywords = keywordsInput.value.split(',')
-      .map(k => k.trim()).filter(k => k.length > 0);
     await sendMessage({ type: 'SAVE_SETTINGS', settings });
   });
 

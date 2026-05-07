@@ -9,10 +9,61 @@
   ]);
 
   let isEnabled = false;
+  let isTranslating = false;
   let targetLang = 'zh-CN';
-  let keywords = [];
-  let currentHighlightIndex = 0;
   const originalTexts = new Map();
+
+  // 翻译代数计数器，用于中断旧的翻译任务
+  let translationGeneration = 0;
+
+  // ========== 限流器 ==========
+  let lastRequestTime = 0;
+  const MIN_REQUEST_INTERVAL = 300;
+
+  async function throttle() {
+    const now = Date.now();
+    const wait = Math.max(0, lastRequestTime + MIN_REQUEST_INTERVAL - now);
+    if (wait > 0) await new Promise(r => setTimeout(r, wait));
+    lastRequestTime = Date.now();
+  }
+
+  // ========== 判断是否已为目标语言文本 ==========
+  function isTargetLanguage(text) {
+    if (targetLang.startsWith('zh')) {
+      const cjk = text.match(/[一-鿿㐀-䶿]/g);
+      const total = text.replace(/[\s\p{P}]/gu, '').length;
+      if (total === 0) return false;
+      return (cjk ? cjk.length : 0) / total > 0.3;
+    }
+    if (targetLang === 'ja') {
+      const ja = text.match(/[぀-ゟ゠-ヿ一-鿿]/g);
+      const total = text.replace(/[\s\p{P}]/gu, '').length;
+      if (total === 0) return false;
+      return (ja ? ja.length : 0) / total > 0.3;
+    }
+    if (targetLang === 'ko') {
+      const ko = text.match(/[가-힯ᄀ-ᇿ]/g);
+      const total = text.replace(/[\s\p{P}]/gu, '').length;
+      if (total === 0) return false;
+      return (ko ? ko.length : 0) / total > 0.3;
+    }
+    return false;
+  }
+
+  // ========== 静默保存 enabled 状态（不触发 notifyAllTabs）==========
+  function saveEnabledQuiet(enabled) {
+    try {
+      chrome.storage.sync.get('settings', (result) => {
+        const settings = result.settings || {};
+        settings.enabled = enabled;
+        chrome.storage.sync.set({ settings });
+      });
+      // 只更新 badge，不触发 round-trip 消息
+      chrome.runtime.sendMessage({ type: 'UPDATE_BADGE', enabled });
+    } catch (e) {
+      // 静默失败
+    }
+  }
 
   // ========== 进度浮层 ==========
   function showProgress(text, type) {
@@ -31,89 +82,36 @@
     if (el) el.className = '';
   }
 
-  // ========== 关键词高亮 ==========
-  function highlightKeywords() {
-    // 清除旧高亮
-    document.querySelectorAll('[bt-highlight]').forEach(el => {
-      el.removeAttribute('bt-highlight');
-    });
-
-    if (keywords.length === 0) {
-      removeNavButton();
-      return;
+  // ========== 翻译功能 ==========
+  async function translateViaGoogle(text) {
+    await throttle();
+    const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${targetLang}&dt=t&q=${encodeURIComponent(text)}`;
+    const resp = await fetch(url);
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const data = await resp.json();
+    let result = '';
+    if (data && data[0]) {
+      for (const p of data[0]) if (p[0]) result += p[0];
     }
+    return result || text;
+  }
 
-    let count = 0;
-    for (const [node, original] of originalTexts) {
-      const translated = node.textContent.toLowerCase();
-      const originalLower = original.toLowerCase();
-      for (const kw of keywords) {
-        if (kw && (originalLower.includes(kw.toLowerCase()) || translated.includes(kw.toLowerCase()))) {
-          if (node.parentElement) {
-            node.parentElement.setAttribute('bt-highlight', 'true');
-            count++;
-          }
-          break;
+  async function translateViaGoogleWithRetry(text, retries = 2) {
+    for (let attempt = 0; attempt <= retries; attempt++) {
+      try {
+        return await translateViaGoogle(text);
+      } catch (e) {
+        if (attempt < retries) {
+          const delay = 1000 * (attempt + 1);
+          console.warn(`[BT] Google API 请求失败，${delay}ms 后重试 (${attempt + 1}/${retries}):`, e.message);
+          await new Promise(r => setTimeout(r, delay));
+        } else {
+          console.warn('[BT] Google API 重试耗尽:', text.substring(0, 30));
+          return text;
         }
       }
     }
-
-    console.log('[BT] 关键词高亮:', count, '个匹配');
-    updateNavButton(count);
-  }
-
-  // ========== 高亮导航 ==========
-  function createNavButton() {
-    if (document.getElementById('bt-nav')) return;
-    const nav = document.createElement('div');
-    nav.id = 'bt-nav';
-    nav.innerHTML = `
-      <button id="bt-nav-up" title="上一个">&#9650;</button>
-      <span id="bt-nav-count">0</span>
-      <button id="bt-nav-down" title="下一个">&#9660;</button>
-    `;
-    document.body.appendChild(nav);
-    document.getElementById('bt-nav-up').addEventListener('click', () => scrollToHighlight(-1));
-    document.getElementById('bt-nav-down').addEventListener('click', () => scrollToHighlight(1));
-  }
-
-  function removeNavButton() {
-    const nav = document.getElementById('bt-nav');
-    if (nav) nav.remove();
-  }
-
-  function updateNavButton(count) {
-    if (count === 0) { removeNavButton(); return; }
-    createNavButton();
-    document.getElementById('bt-nav-count').textContent = count;
-    currentHighlightIndex = 0;
-  }
-
-  function scrollToHighlight(direction) {
-    const highlights = [...document.querySelectorAll('[bt-highlight]')];
-    if (highlights.length === 0) return;
-    currentHighlightIndex += direction;
-    if (currentHighlightIndex < 0) currentHighlightIndex = highlights.length - 1;
-    if (currentHighlightIndex >= highlights.length) currentHighlightIndex = 0;
-    highlights[currentHighlightIndex].scrollIntoView({ behavior: 'smooth', block: 'center' });
-    document.getElementById('bt-nav-count').textContent = `${currentHighlightIndex + 1}/${highlights.length}`;
-  }
-
-  // ========== 翻译功能 ==========
-  async function translateViaGoogle(text) {
-    try {
-      const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${targetLang}&dt=t&q=${encodeURIComponent(text)}`;
-      const resp = await fetch(url);
-      if (!resp.ok) return text;
-      const data = await resp.json();
-      let result = '';
-      if (data && data[0]) {
-        for (const p of data[0]) if (p[0]) result += p[0];
-      }
-      return result || text;
-    } catch (e) {
-      return text;
-    }
+    return text;
   }
 
   async function translateViaBackground(texts) {
@@ -130,17 +128,48 @@
     throw new Error('Background 翻译响应无效');
   }
 
-  async function translateTexts(texts) {
-    try {
-      if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.sendMessage) {
-        const translations = await translateViaBackground(texts);
-        const changed = translations.filter((t, i) => t !== texts[i]).length;
-        if (changed > 0) return translations;
+  async function translateTexts(texts, gen) {
+    // 如果代数已过期，直接返回原文
+    if (gen !== translationGeneration) return texts.slice();
+
+    const needTranslate = [];
+    const indices = [];
+    for (let i = 0; i < texts.length; i++) {
+      if (isTargetLanguage(texts[i])) {
+        // 已是目标语言，不需要翻译
+      } else {
+        needTranslate.push(texts[i]);
+        indices.push(i);
       }
+    }
+
+    if (needTranslate.length === 0) {
+      return texts.slice();
+    }
+
+    const results = texts.slice();
+
+    // 优先通过 background 翻译
+    try {
+      if (gen !== translationGeneration) return texts.slice();
+      const translations = await translateViaBackground(needTranslate);
+      if (gen !== translationGeneration) return texts.slice();
+      for (let i = 0; i < indices.length; i++) {
+        results[indices[i]] = translations[i];
+      }
+      const changed = translations.filter((t, i) => t !== needTranslate[i]).length;
+      if (changed > 0) return results;
     } catch (e) {
       console.warn('[BT] Background 翻译失败，使用直接 API:', e.message);
     }
-    return Promise.all(texts.map(t => translateViaGoogle(t)));
+
+    // 逐个翻译并限流
+    for (let i = 0; i < indices.length; i++) {
+      if (gen !== translationGeneration) return texts.slice();
+      const translated = await translateViaGoogleWithRetry(needTranslate[i]);
+      results[indices[i]] = translated;
+    }
+    return results;
   }
 
   function findTextNodes(root) {
@@ -175,7 +204,9 @@
   async function translatePage() {
     if (isEnabled) return;
     isEnabled = true;
-    console.log('[BT] 开始翻译... 目标语言:', targetLang);
+    isTranslating = true;
+    const gen = ++translationGeneration;
+    console.log('[BT] 开始翻译 [gen=' + gen + ']... 目标语言:', targetLang);
 
     const nodes = findTextNodes(document.body);
     console.log('[BT] 找到', nodes.length, '个文本节点');
@@ -183,46 +214,77 @@
     if (nodes.length === 0) {
       console.warn('[BT] 没有找到可翻译的文本节点');
       isEnabled = false;
+      isTranslating = false;
       return;
     }
 
-    const total = Math.ceil(nodes.length / 5);
-    let batchNum = 0;
-
     showProgress('翻译中... 0/' + nodes.length, '');
 
-    const batchSize = 5;
+    const batchSize = 3;
     for (let i = 0; i < nodes.length; i += batchSize) {
-      if (!isEnabled) break;
-      batchNum++;
+      // 每次循环前检查是否被中断
+      if (gen !== translationGeneration) {
+        console.log('[BT] 翻译被中断 [gen=' + gen + ']');
+        isTranslating = false;
+        return;
+      }
+
       const batch = nodes.slice(i, i + batchSize);
       const originals = batch.map(n => n.textContent.trim());
-      const translations = await translateTexts(originals);
-      applyTranslations(batch, originals, translations);
+
+      try {
+        const translations = await translateTexts(originals, gen);
+        // await 返回后再检查是否被中断
+        if (gen !== translationGeneration) {
+          console.log('[BT] 翻译被中断 [gen=' + gen + ']');
+          isTranslating = false;
+          return;
+        }
+        applyTranslations(batch, originals, translations);
+      } catch (e) {
+        console.warn('[BT] 批次翻译失败:', e.message);
+      }
 
       if (i + batchSize < nodes.length) {
-        showProgress('翻译中... ' + (i + batchSize) + '/' + nodes.length, '');
-        await new Promise(r => setTimeout(r, 100));
+        if (gen !== translationGeneration) {
+          isTranslating = false;
+          return;
+        }
+        showProgress('翻译中... ' + Math.min(i + batchSize, nodes.length) + '/' + nodes.length, '');
+        await new Promise(r => setTimeout(r, 500));
+        if (gen !== translationGeneration) {
+          isTranslating = false;
+          return;
+        }
       }
+    }
+
+    // 最终检查
+    if (gen !== translationGeneration) {
+      isTranslating = false;
+      return;
     }
 
     const count = document.querySelectorAll('[' + BT_ATTR + ']').length;
 
     if (count > 0) {
       showProgress('已翻译 ' + count + ' 个元素', 'done');
-      // 关键词高亮
-      highlightKeywords();
     } else {
       showProgress('翻译失败 - 网络不通', 'error');
       isEnabled = false;
     }
 
+    isTranslating = false;
     setTimeout(hideProgress, 3000);
-    console.log('[BT] 初始翻译完成! 已翻译:', count, '个元素');
+    console.log('[BT] 翻译完成 [gen=' + gen + ']! 已翻译:', count, '个元素');
   }
 
   function restorePage() {
+    // 递增代数，中断所有正在运行的翻译任务
+    translationGeneration++;
     isEnabled = false;
+    isTranslating = false;
+
     for (const [node, original] of originalTexts) {
       if (node.parentElement) {
         node.textContent = original;
@@ -230,11 +292,8 @@
       }
     }
     originalTexts.clear();
-    // 清除高亮
-    document.querySelectorAll('[bt-highlight]').forEach(el => el.removeAttribute('bt-highlight'));
-    removeNavButton();
     hideProgress();
-    console.log('[BT] 已还原');
+    console.log('[BT] 已还原 [gen=' + translationGeneration + ']');
   }
 
   function startObserver() {
@@ -242,29 +301,29 @@
     let isProcessing = false;
 
     async function processQueue() {
-      if (isProcessing || queue.length === 0 || !isEnabled) return;
+      if (isProcessing || queue.length === 0 || !isEnabled || isTranslating) return;
       isProcessing = true;
 
-      const batch = queue.splice(0, 10);
+      const gen = translationGeneration;
+      const batch = queue.splice(0, 5);
       const originals = batch.map(n => n.textContent.trim());
 
       try {
-        const translations = await translateTexts(originals);
+        const translations = await translateTexts(originals, gen);
+        if (gen !== translationGeneration) { isProcessing = false; return; }
         applyTranslations(batch, originals, translations);
-        // 动态内容翻译后也检查高亮
-        if (keywords.length > 0) highlightKeywords();
       } catch (e) {
         console.warn('[BT] 动态内容翻译失败:', e.message);
       }
 
       isProcessing = false;
       if (queue.length > 0) {
-        setTimeout(processQueue, 50);
+        setTimeout(processQueue, 500);
       }
     }
 
     const observer = new MutationObserver((mutations) => {
-      if (!isEnabled) return;
+      if (!isEnabled || isTranslating) return;
       let hasNew = false;
 
       for (const mutation of mutations) {
@@ -282,7 +341,7 @@
       }
 
       if (hasNew && !isProcessing) {
-        setTimeout(processQueue, 100);
+        setTimeout(processQueue, 500);
       }
     });
 
@@ -291,23 +350,19 @@
   }
 
   function startPeriodicScan() {
-    let lastCount = 0;
     setInterval(() => {
-      if (!isEnabled) return;
+      if (!isEnabled || isTranslating) return;
+      const gen = translationGeneration;
       const untranslated = findTextNodes(document.body);
-      const newCount = untranslated.length;
-      if (newCount > 0 && newCount !== lastCount) {
-        console.log('[BT] 定时扫描发现', newCount, '个未翻译节点');
-        lastCount = newCount;
+      if (untranslated.length > 0 && untranslated.length < 50) {
+        console.log('[BT] 定时扫描发现', untranslated.length, '个未翻译节点');
         const originals = untranslated.map(n => n.textContent.trim());
-        translateTexts(originals).then(translations => {
+        translateTexts(originals, gen).then(translations => {
+          if (gen !== translationGeneration) return;
           applyTranslations(untranslated, originals, translations);
-          if (keywords.length > 0) highlightKeywords();
         });
-      } else {
-        lastCount = newCount;
       }
-    }, 3000);
+    }, 5000);
   }
 
   async function loadSettings() {
@@ -316,8 +371,7 @@
         const resp = await chrome.runtime.sendMessage({ type: 'GET_SETTINGS' });
         if (resp && resp.settings) {
           targetLang = resp.settings.targetLang || 'zh-CN';
-          keywords = resp.settings.keywords || [];
-          console.log('[BT] 设置已加载, 引擎:', resp.settings.engine, ', 目标语言:', targetLang, ', 关键词:', keywords.join(','));
+          console.log('[BT] 设置已加载, 引擎:', resp.settings.engine, ', 目标语言:', targetLang);
           if (resp.settings.enabled === false) return false;
         }
       }
@@ -327,21 +381,52 @@
     return true;
   }
 
-  // 监听来自 background 的消息
+  // ========== 快捷键直接处理 ==========
+  document.addEventListener('keydown', (e) => {
+    if (!e.altKey) return;
+
+    const key = e.key.toLowerCase();
+
+    if (key === 's' && !isEnabled && !isTranslating) {
+      e.preventDefault();
+      loadSettings().then(() => {
+        translatePage().then(() => { startObserver(); startPeriodicScan(); });
+      });
+      saveEnabledQuiet(true);
+    }
+
+    if (key === 'r' && (isEnabled || isTranslating)) {
+      e.preventDefault();
+      restorePage();
+      saveEnabledQuiet(false);
+    }
+
+    if (key === 't') {
+      e.preventDefault();
+      if (isEnabled || isTranslating) {
+        restorePage();
+        saveEnabledQuiet(false);
+      } else {
+        loadSettings().then(() => {
+          translatePage().then(() => { startObserver(); startPeriodicScan(); });
+        });
+        saveEnabledQuiet(true);
+      }
+    }
+  });
+
+  // 监听来自 background 的消息（仅响应 popup/options 的操作）
   if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.onMessage) {
     chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       if (msg.type === 'TRANSLATE_PAGE') {
-        if (msg.enabled && !isEnabled) {
+        if (msg.enabled && !isEnabled && !isTranslating) {
           loadSettings().then(() => translatePage().then(() => { startObserver(); startPeriodicScan(); }));
-        } else if (!msg.enabled && isEnabled) {
+        } else if (!msg.enabled && (isEnabled || isTranslating)) {
           restorePage();
         }
       }
-      // 设置更新时重新加载关键词
       if (msg.type === 'SETTINGS_UPDATED') {
-        loadSettings().then(() => {
-          if (isEnabled) highlightKeywords();
-        });
+        loadSettings();
       }
     });
   }

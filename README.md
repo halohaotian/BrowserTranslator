@@ -18,9 +18,17 @@ A Chrome extension that translates web pages by replacing text in-place without 
 - **Dynamic Content Support** — Uses MutationObserver and periodic scanning to translate dynamically loaded content
 - **Multiple Translation Engines** — Supports Google, DeepL, Baidu, and custom engines
 - **Multi-language** — Supports 15 languages including Chinese, English, Japanese, Korean, French, German, and more
-- **Keyword Highlighting** — Set keywords to highlight matching translations, with up/down navigation
 - **Translation Cache** — Built-in LRU cache in the Service Worker to avoid redundant API calls
-- **Keyboard Shortcut** — Toggle translation with `Alt+T`
+
+## Keyboard Shortcuts
+
+| Shortcut | Action |
+|----------|--------|
+| `Alt + T` | Toggle translation on/off |
+| `Alt + S` | Start translation |
+| `Alt + R` | Restore original text |
+
+Shortcuts work on any web page at any time. You can also toggle translation via the extension icon popup.
 
 ## Installation
 
@@ -60,7 +68,7 @@ browser-translator/
 │   └── service-worker.js          # Background service (messaging, translation dispatch, cache)
 ├── content/
 │   ├── content.js                 # Content script (main translation logic)
-│   ├── content.css                # Progress overlay and highlight styles
+│   ├── content.css                # Progress overlay styles
 │   ├── dom-translator.js          # DOM translation
 │   └── text-finder.js             # Text node finder
 ├── engines/
@@ -86,7 +94,6 @@ Click the extension icon to open the popup and configure:
 - **Translation Toggle** — Enable or disable translation
 - **Target Language** — Select the translation target language
 - **Translation Engine** — Choose the translation service
-- **Keywords** — Set keywords (comma-separated) to highlight matching content after translation
 
 Click **Advanced Settings** at the bottom of the popup to access the full settings page for configuring API keys for each engine.
 
@@ -95,7 +102,7 @@ Click **Advanced Settings** at the bottom of the popup to access the full settin
 - Built on Manifest V3
 - Translation requests are dispatched by the Service Worker with caching and batching
 - Content scripts use `MutationObserver` to handle SPA and dynamic pages
-- Fallback periodic scan (3-second interval) ensures no nodes are missed
+- Fallback periodic scan (5-second interval) ensures no nodes are missed
 - Original text is preserved after translation and can be restored at any time
 
 ---
@@ -108,9 +115,17 @@ Click **Advanced Settings** at the bottom of the popup to access the full settin
 - **动态内容支持** — 通过 MutationObserver 和定时扫描，自动翻译动态加载的内容
 - **多翻译引擎** — 支持 Google、DeepL、百度翻译及自定义引擎
 - **多语言** — 支持中文、英语、日语、韩语、法语、德语等 15 种语言
-- **关键词高亮** — 设置关键词后，翻译结果中匹配的内容会被高亮，并支持上下导航
 - **翻译缓存** — 后台 Service Worker 内置 LRU 缓存，避免重复翻译
-- **快捷键** — `Alt+T` 快速切换翻译开关
+
+## 快捷键
+
+| 快捷键 | 功能 |
+|--------|------|
+| `Alt + T` | 切换翻译开关 |
+| `Alt + S` | 开始翻译 |
+| `Alt + R` | 还原原文 |
+
+快捷键在任意网页上随时可用。也可以通过点击扩展图标弹出窗口来切换翻译。
 
 ## 安装
 
@@ -150,7 +165,7 @@ browser-translator/
 │   └── service-worker.js          # 后台服务（消息处理、翻译调度、缓存）
 ├── content/
 │   ├── content.js                 # 内容脚本（页面翻译主逻辑）
-│   ├── content.css                # 翻译浮层与高亮样式
+│   ├── content.css                # 翻译浮层样式
 │   ├── dom-translator.js          # DOM 翻译
 │   └── text-finder.js             # 文本节点查找
 ├── engines/
@@ -176,7 +191,6 @@ browser-translator/
 - **翻译开关** — 启用/禁用翻译
 - **目标语言** — 翻译目标语言
 - **翻译引擎** — 选择使用的翻译服务
-- **关键词** — 设置关注的关键词（逗号分隔），翻译后自动高亮匹配内容
 
 也可点击弹出窗口底部的「高级设置」进入完整的设置页面，配置各引擎的 API Key 等参数。
 
@@ -185,7 +199,7 @@ browser-translator/
 - 基于 Manifest V3 构建
 - 翻译请求由 Service Worker 统一调度，支持缓存和批量处理
 - 内容脚本通过 `MutationObserver` 监听 DOM 变化，处理 SPA 等动态页面
-- 备用定时扫描（3 秒间隔）确保不遗漏未翻译节点
+- 备用定时扫描（5 秒间隔）确保不遗漏未翻译节点
 - 翻译后保留原文数据，可随时还原
 
 ## License

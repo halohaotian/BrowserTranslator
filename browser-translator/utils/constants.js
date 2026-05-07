@@ -17,7 +17,6 @@ const DEFAULT_SETTINGS = {
   targetLang: 'zh-CN',
   sourceLang: 'auto',
   engine: 'google',
-  keywords: [],
   excludedSites: [],
   engines: {
     google: { apiKey: '', enabled: true },
