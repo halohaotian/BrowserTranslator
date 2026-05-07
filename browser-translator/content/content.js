@@ -381,6 +381,24 @@
     return true;
   }
 
+  // ========== 启动翻译的安全封装（loadSettings 异步边界后检查代数）==========
+  function safeStartTranslation() {
+    const genBefore = translationGeneration;
+    loadSettings().then(() => {
+      // 仅在 loadSettings 等待期间用户按了 Alt+R 才取消
+      if (genBefore !== translationGeneration) {
+        console.log('[BT] loadSettings 返回后代数已变，取消翻译');
+        return;
+      }
+      translatePage().then(() => {
+        // translatePage 自己会 ++translationGeneration，所以这里只检查 isEnabled
+        if (!isEnabled) return;
+        startObserver();
+        startPeriodicScan();
+      });
+    });
+  }
+
   // ========== 快捷键直接处理 ==========
   document.addEventListener('keydown', (e) => {
     if (!e.altKey) return;
@@ -389,10 +407,8 @@
 
     if (key === 's' && !isEnabled && !isTranslating) {
       e.preventDefault();
-      loadSettings().then(() => {
-        translatePage().then(() => { startObserver(); startPeriodicScan(); });
-      });
       saveEnabledQuiet(true);
+      safeStartTranslation();
     }
 
     if (key === 'r' && (isEnabled || isTranslating)) {
@@ -407,10 +423,8 @@
         restorePage();
         saveEnabledQuiet(false);
       } else {
-        loadSettings().then(() => {
-          translatePage().then(() => { startObserver(); startPeriodicScan(); });
-        });
         saveEnabledQuiet(true);
+        safeStartTranslation();
       }
     }
   });
@@ -420,7 +434,7 @@
     chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       if (msg.type === 'TRANSLATE_PAGE') {
         if (msg.enabled && !isEnabled && !isTranslating) {
-          loadSettings().then(() => translatePage().then(() => { startObserver(); startPeriodicScan(); }));
+          safeStartTranslation();
         } else if (!msg.enabled && (isEnabled || isTranslating)) {
           restorePage();
         }
@@ -434,8 +448,19 @@
   function startWhenReady() {
     const go = () => {
       console.log('[BT] Browser Translator 已加载');
+      const genBefore = translationGeneration;
       loadSettings().then(ok => {
-        if (ok !== false) translatePage().then(() => { startObserver(); startPeriodicScan(); });
+        if (genBefore !== translationGeneration) {
+          console.log('[BT] 初始化期间代数已变，取消自动翻译');
+          return;
+        }
+        if (ok !== false) {
+          translatePage().then(() => {
+            if (!isEnabled) return;
+            startObserver();
+            startPeriodicScan();
+          });
+        }
       }).catch(e => {
         console.error('[BT] 启动失败:', e.message);
       });

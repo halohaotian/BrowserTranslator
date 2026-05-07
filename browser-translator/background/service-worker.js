@@ -91,6 +91,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
+  if (message.type === 'UPDATE_BADGE') {
+    chrome.action.setBadgeText({ text: message.enabled ? 'ON' : '' });
+    sendResponse({ success: true });
+    return true;
+  }
+
   if (message.type === 'TOGGLE_ENABLED') {
     getSettings().then(settings => {
       settings.enabled = message.enabled;
