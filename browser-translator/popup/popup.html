@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="popup">
+    <h1 class="title">Browser Translator</h1>
+
+    <div class="toggle-row">
+      <span>翻译开关</span>
+      <label class="switch">
+        <input type="checkbox" id="enabledToggle">
+        <span class="slider"></span>
+      </label>
+    </div>
+
+    <div class="setting-group">
+      <label>目标语言</label>
+      <select id="targetLang"></select>
+    </div>
+
+    <div class="setting-group">
+      <label>翻译引擎</label>
+      <select id="engineSelect">
+        <option value="google">Google 翻译（免费）</option>
+        <option value="deepl">DeepL</option>
+        <option value="baidu">百度翻译</option>
+        <option value="custom">自定义 API</option>
+      </select>
+    </div>
+
+    <div class="setting-group">
+      <label>关键词高亮（逗号分隔）</label>
+      <input type="text" id="keywordsInput" placeholder="例如：step, method, API">
+      <small class="hint">翻译时用特殊颜色标记包含这些词的内容</small>
+    </div>
+
+    <div id="statusText" class="status"></div>
+
+    <a href="#" id="openOptions" class="link">设置（API Key 等）</a>
+  </div>
+
+  <script src="../utils/constants.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>

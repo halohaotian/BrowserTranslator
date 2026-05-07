@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <link rel="stylesheet" href="options.css">
+</head>
+<body>
+  <div class="container">
+    <h1>Browser Translator 设置</h1>
+
+    <section class="section">
+      <h2>翻译引擎</h2>
+
+      <div class="engine-config">
+        <h3>Google 翻译</h3>
+        <p class="hint">免费使用，无需 API Key</p>
+        <label class="toggle-label">
+          <span>启用</span>
+          <input type="checkbox" id="googleEnabled">
+        </label>
+      </div>
+
+      <div class="engine-config">
+        <h3>DeepL</h3>
+        <p class="hint">翻译质量高，需要 API Key</p>
+        <label class="toggle-label">
+          <span>启用</span>
+          <input type="checkbox" id="deeplEnabled">
+        </label>
+        <div class="field">
+          <label>API Key</label>
+          <input type="password" id="deeplApiKey" placeholder="输入 DeepL API Key">
+        </div>
+      </div>
+
+      <div class="engine-config">
+        <h3>百度翻译</h3>
+        <p class="hint">中文翻译质量好，需要申请密钥</p>
+        <label class="toggle-label">
+          <span>启用</span>
+          <input type="checkbox" id="baiduEnabled">
+        </label>
+        <div class="field">
+          <label>APP ID</label>
+          <input type="text" id="baiduAppId" placeholder="输入百度翻译 APP ID">
+        </div>
+        <div class="field">
+          <label>密钥</label>
+          <input type="password" id="baiduSecretKey" placeholder="输入百度翻译密钥">
+        </div>
+      </div>
+
+      <div class="engine-config">
+        <h3>自定义 API</h3>
+        <p class="hint">对接你自己的翻译服务</p>
+        <label class="toggle-label">
+          <span>启用</span>
+          <input type="checkbox" id="customEnabled">
+        </label>
+        <div class="field">
+          <label>API 地址</label>
+          <input type="url" id="customUrl" placeholder="https://your-api.com/translate">
+        </div>
+        <div class="field">
+          <label>API Key（可选）</label>
+          <input type="password" id="customApiKey" placeholder="输入 API Key">
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2>排除网站</h2>
+      <p class="hint">以下网站不进行翻译（每行一个域名）</p>
+      <textarea id="excludedSites" rows="4" placeholder="example.com&#10;github.com"></textarea>
+    </section>
+
+    <div class="actions">
+      <button id="saveBtn" class="btn btn-primary">保存设置</button>
+      <span id="saveStatus" class="save-status"></span>
+    </div>
+  </div>
+
+  <script src="options.js"></script>
+</body>
+</html>
