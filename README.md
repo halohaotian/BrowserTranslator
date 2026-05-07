@@ -1,6 +1,106 @@
 # Browser Translator
 
+A Chrome extension that translates web pages by replacing text in-place without breaking page interactivity.
+
 一个 Chrome 浏览器翻译扩展，将网页文字直接替换为翻译后的语言，不破坏页面交互。
+
+---
+
+[English](#english) | [中文](#中文)
+
+---
+
+<a id="english"></a>
+
+## Features
+
+- **Instant Page Translation** — Automatically translates page content into the target language by replacing original text in-place
+- **Dynamic Content Support** — Uses MutationObserver and periodic scanning to translate dynamically loaded content
+- **Multiple Translation Engines** — Supports Google, DeepL, Baidu, and custom engines
+- **Multi-language** — Supports 15 languages including Chinese, English, Japanese, Korean, French, German, and more
+- **Keyword Highlighting** — Set keywords to highlight matching translations, with up/down navigation
+- **Translation Cache** — Built-in LRU cache in the Service Worker to avoid redundant API calls
+- **Keyboard Shortcut** — Toggle translation with `Alt+T`
+
+## Installation
+
+### Load from Source (Developer Mode)
+
+1. Clone the repository
+   ```bash
+   git clone https://github.com/halohaotian/BrowserTranslator.git
+   ```
+2. Open Chrome and navigate to `chrome://extensions/`
+3. Enable **Developer mode** in the top right corner
+4. Click **Load unpacked** and select the `browser-translator` directory
+
+### CLI Debug Mode
+
+Launch Chrome with the translation script injected automatically, useful for development:
+
+```bash
+npm install
+node start-translator.mjs [url]
+```
+
+Configurable at the top of the script:
+
+```js
+const TARGET_LANG = 'zh-CN';   // Target language
+const PROXY = '';               // Proxy address, e.g. 'http://127.0.0.1:7890'
+const START_URL = 'https://en.wikipedia.org/wiki/Translation';
+```
+
+## Project Structure
+
+```
+browser-translator/
+├── manifest.json                  # Extension manifest
+├── background/
+│   └── service-worker.js          # Background service (messaging, translation dispatch, cache)
+├── content/
+│   ├── content.js                 # Content script (main translation logic)
+│   ├── content.css                # Progress overlay and highlight styles
+│   ├── dom-translator.js          # DOM translation
+│   └── text-finder.js             # Text node finder
+├── engines/
+│   ├── engine-interface.js        # Engine base class
+│   ├── google-engine.js           # Google Translate
+│   ├── deepl-engine.js            # DeepL Translate
+│   ├── baidu-engine.js            # Baidu Translate
+│   └── custom-engine.js           # Custom engine
+├── popup/
+│   ├── popup.html / .css / .js   # Popup UI
+├── options/
+│   ├── options.html / .css / .js  # Settings page
+├── utils/
+│   ├── constants.js               # Constants and default settings
+│   └── storage.js                 # Storage utilities
+└── icons/                         # Extension icons
+```
+
+## Configuration
+
+Click the extension icon to open the popup and configure:
+
+- **Translation Toggle** — Enable or disable translation
+- **Target Language** — Select the translation target language
+- **Translation Engine** — Choose the translation service
+- **Keywords** — Set keywords (comma-separated) to highlight matching content after translation
+
+Click **Advanced Settings** at the bottom of the popup to access the full settings page for configuring API keys for each engine.
+
+## Technical Notes
+
+- Built on Manifest V3
+- Translation requests are dispatched by the Service Worker with caching and batching
+- Content scripts use `MutationObserver` to handle SPA and dynamic pages
+- Fallback periodic scan (3-second interval) ensures no nodes are missed
+- Original text is preserved after translation and can be restored at any time
+
+---
+
+<a id="中文"></a>
 
 ## 功能
 
@@ -18,7 +118,7 @@
 
 1. 克隆仓库
    ```bash
-   git clone https://github.com/your-username/browser-translator.git
+   git clone https://github.com/halohaotian/BrowserTranslator.git
    ```
 2. 打开 Chrome，进入 `chrome://extensions/`
 3. 开启右上角「开发者模式」
